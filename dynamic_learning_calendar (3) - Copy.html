@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Learning Calendar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        /* The specific shape requested for day cells from the user's original code */
+        .leaf-shape {
+            border-radius: 20px 4px 20px 4px;
+        }
+        /* Specific shape requested for event pills from the user's original code */
+        .event-pill {
+            border-radius: 8px 2px 8px 2px;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .event-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        @media print {
+            @page {
+                size: A3 landscape;
+                margin: 10mm;
+            }
+            body {
+                background-color: white !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-full-width {
+                width: 100% !important;
+                max-width: none !important;
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .add-btn {
+                display: none !important;
+            }
+        }
+        
+        [contenteditable="true"] {
+            outline: none;
+            border-bottom: 1px dashed transparent;
+            transition: border-color 0.2s;
+        }
+        [contenteditable="true"]:hover, [contenteditable="true"]:focus {
+            border-bottom: 1px dashed #cbd5e1;
+            background-color: rgba(0,0,0,0.02);
+        }
+        .logo-container {
+            position: relative;
+            cursor: pointer;
+            border: 2px dashed transparent;
+            transition: all 0.2s;
+        }
+        .logo-container:hover {
+            border-color: #94a3b8;
+            background-color: rgba(0,0,0,0.02);
+        }
+        .logo-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .logo-actions {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 8px;
+            border-radius: 8px;
+            gap: 8px;
+            white-space: nowrap;
+            z-index: 10;
+        }
+        .logo-container:hover .logo-actions {
+            display: flex;
+        }
+        .day-cell .add-btn {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .day-cell:hover .add-btn {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="text-slate-900 p-4 md:p-8">
+    <!-- Controls -->
+    <div class="no-print max-w-[1400px] mx-auto bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-wrap gap-4 items-center justify-between">
+        <div class="flex items-center gap-4">
+            <select id="monthSelect" class="bg-slate-100 border border-slate-300 text-slate-800 font-bold py-2 px-4 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                <option value="0">January</option>
+                <option value="1">February</option>
+                <option value="2">March</option>
+                <option value="3" selected>April</option>
+                <option value="4">May</option>
+                <option value="5">June</option>
+                <option value="6">July</option>
+                <option value="7">August</option>
+                <option value="8">September</option>
+                <option value="9">October</option>
+                <option value="10">November</option>
+                <option value="11">December</option>
+            </select>
+            <input type="number" id="yearSelect" class="bg-slate-100 border border-slate-300 text-slate-800 font-bold py-2 px-4 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-24" value="2026">
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <div class="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
+                <button id="btnPlan" onclick="setMode('plan')" class="px-6 py-2 rounded font-bold text-sm transition-all shadow bg-white text-blue-700">Plan</button>
+                <button id="btnActual" onclick="setMode('actual')" class="px-6 py-2 rounded font-bold text-sm transition-all text-slate-500 hover:text-slate-800">Actual</button>
+            </div>
+            
+            <button onclick="saveBackup()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow flex items-center gap-2 text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                Save Backup
+            </button>
+            <label class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-4 rounded-lg transition-colors shadow flex items-center gap-2 text-sm cursor-pointer border border-slate-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                Restore Backup
+                <input type="file" class="hidden" accept=".json" onchange="restoreBackup(event)">
+            </label>
+        </div>
+        
+        <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            Print A3
+        </button>
+    </div>
+
+    <!-- Main Document -->
+    <div class="print-full-width max-w-[1400px] mx-auto bg-white p-8 md:p-12 shadow-2xl border border-slate-200">
+        
+        <!-- Header Section -->
+        <div class="w-full mb-6 relative">
+            <div class="flex justify-between items-start relative pb-20">
+                <!-- Left Logo -->
+                <div class="logo-container w-32 h-32 flex-shrink-0" id="logo1-container">
+                    <img id="logo1-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2338bdf8'/><path d='M30 70 L30 40 L70 40 L70 70 Z' fill='white'/><rect x='35' y='50' width='5' height='15' fill='%23fbbf24'/><rect x='45' y='45' width='5' height='20' fill='%23a78bfa'/><rect x='55' y='55' width='5' height='10' fill='%2334d399'/><circle cx='80' cy='60' r='8' fill='%231e293b'/><path d='M75 70 L85 70 L82 85 L78 85 Z' fill='%231e293b'/><path d='M60 50 L75 55' stroke='%231e293b' stroke-width='2'/></svg>" alt="Training Logo" class="w-full h-full object-contain object-left">
+                    <div class="logo-actions no-print">
+                        <button onclick="triggerUpload('logo1')" class="bg-blue-500 text-white p-1 rounded text-xs">Upload</button>
+                        <button onclick="clearLogo('logo1')" class="bg-red-500 text-white p-1 rounded text-xs">Clear</button>
+                    </div>
+                    <input type="file" id="logo1-upload" class="hidden" accept="image/*" onchange="handleUpload(event, 'logo1')">
+                </div>
+
+                <!-- Center Title -->
+                <div class="flex flex-col items-center justify-center absolute left-1/2 -translate-x-1/2 top-4">
+                    <div contenteditable="true" class="text-4xl font-extrabold text-black tracking-tight" id="headerTitle1">JSW Steel Salem</div>
+                    <div contenteditable="true" class="text-2xl font-bold text-slate-800 mt-2" id="headerTitle2">Learning & Development</div>
+                </div>
+
+                <!-- Right Logo (Better Everyday layout constructed via CSS and external transparent logo to match request) -->
+                <div class="logo-container w-48 flex-shrink-0 flex flex-col items-center justify-start mt-2" id="logo2-container">
+                    <img id="logo2-img" src="https://upload.wikimedia.org/wikipedia/commons/3/3c/JSW_Group_logo.svg" alt="JSW Logo" class="h-16 object-contain">
+                    <div class="text-[#e31837] font-medium text-lg mt-1 tracking-wide">Better Everyday</div>
+                    <div class="logo-actions no-print">
+                        <button onclick="triggerUpload('logo2')" class="bg-blue-500 text-white p-1 rounded text-xs">Upload</button>
+                        <button onclick="clearLogo('logo2')" class="bg-red-500 text-white p-1 rounded text-xs">Clear</button>
+                    </div>
+                    <input type="file" id="logo2-upload" class="hidden" accept="image/*" onchange="handleUpload(event, 'logo2')">
+                </div>
+            </div>
+
+            <!-- Legends & Document Right Title aligned to bottom, over horizontal line -->
+            <div class="flex justify-between items-end pb-3 border-b-[3px] border-black mt-[-40px]">
+                <!-- Checkbox Style Legends -->
+                <div class="flex items-center gap-6" id="legendContainer"></div>
+                
+                <!-- Right Side Texts Aligned Properly above the line -->
+                <div class="text-right">
+                    <div id="dynamic-calendar-title" class="font-bold text-black text-xl mb-1">Learning Calendar Plan – April 2026</div>
+                    <div contenteditable="true" class="text-slate-600 font-bold" id="headerDocId">IMSR/GS/HR – TRD/13</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Days Header -->
+        <div class="grid grid-cols-7 gap-3 mb-2">
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Monday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Tuesday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Wednesday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Thursday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Friday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Saturday</div>
+            <div class="text-center font-extrabold text-black uppercase text-sm tracking-wider">Sunday</div>
+        </div>
+        
+        <!-- Calendar Grid Container -->
+        <div id="calendarGrid" class="grid grid-cols-7 gap-3"></div>
+    </div>
+
+    <!-- Event Modal -->
+    <div id="eventModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center z-50 no-print">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border-4 border-black transform transition-all">
+            <h3 id="modalTitle" class="text-2xl font-black text-black mb-6 uppercase tracking-wide">Add Event</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Event Topic</label>
+                    <input type="text" id="eventTopic" class="w-full border-2 border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none font-medium" placeholder="e.g., Scaffolding Safety">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Department</label>
+                    <input type="text" id="eventDept" class="w-full border-2 border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none font-medium" placeholder="e.g., General Services">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Timing (Leave empty for no time)</label>
+                    <div class="flex gap-3">
+                        <input type="text" id="eventTime" class="flex-1 border-2 border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none font-medium" placeholder="e.g., 2.30">
+                        <select id="eventAMPM" class="border-2 border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none font-medium w-28">
+                            <!-- 'No Time' option removed as requested -->
+                            <option value="AM">AM</option>
+                            <option value="PM" selected>PM</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Event Type</label>
+                    <select id="eventType" class="w-full border-2 border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-black focus:border-black outline-none bg-white font-bold text-slate-800"></select>
+                </div>
+            </div>
+            <div class="mt-8 flex gap-3 justify-end">
+                <button id="btnDelete" onclick="deleteEvent()" class="px-5 py-2.5 rounded-lg text-red-600 font-bold border-2 border-red-600 hover:bg-red-50 transition-colors hidden">Delete</button>
+                <button onclick="closeModal()" class="px-5 py-2.5 rounded-lg text-slate-600 font-bold border-2 border-slate-300 hover:bg-slate-100 transition-colors">Cancel</button>
+                <button id="btnSaveEvent" onclick="saveEvent()" class="px-6 py-2.5 rounded-lg bg-black text-white font-bold hover:bg-slate-800 transition-colors shadow-md">Save Event</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'plan';
+        let selectedDate = null;
+        let editingEventId = null;
+        let history = [];
+        let historyIndex = -1;
+
+        // Original Color palette restored exactly as provided by user in their original code
+        const colors = {
+            'Internal': 'bg-white text-slate-800 border-2 border-slate-300',
+            'Internal with External': 'bg-blue-200 text-slate-800 border-2 border-blue-300',
+            'External': 'bg-slate-200 text-slate-800 border-2 border-slate-300',
+            'Plan Achieved': 'bg-emerald-300 text-slate-800 border-2 border-emerald-400',
+            'Deviation': 'bg-orange-300 text-slate-800 border-2 border-orange-400'
+        };
+        const planTypes = ['Internal', 'Internal with External', 'External'];
+        const actualTypes = ['Plan Achieved', 'Deviation'];
+
+        const defaultData = {
+            events: {
+                plan: [
+                    { id: 'e1', date: '2026-04-02', title: 'Scaffolding & Conveyor Safety', dept: 'General Services', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e2', date: '2026-04-03', title: 'Working at Heights', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e3', date: '2026-04-04', title: 'Confined Space Entry - SME Module', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e4', date: '2026-04-06', title: 'Usage of PPE’s - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e5', date: '2026-04-07', title: 'Machine Guarding', dept: 'General Services', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e6', date: '2026-04-08', title: 'Emergency Response Control Plan', dept: 'Bar and Rod', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e7', date: '2026-04-09', title: 'Emergency Response Control Plan', dept: 'Blast Furnace-1, Blast Furnace -2 & PCI', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e8', date: '2026-04-10', title: 'Confined Space Entry - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e9', date: '2026-04-11', title: 'Fire Watcher (Safety TNI)', dept: 'Blast Furnace, Sinter Plant & Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e10', date: '2026-04-06', title: 'Fire Prevention & Protection Measures', dept: 'Blast Furnace, Sinter Plant & Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e11', date: '2026-04-07', title: 'LOTO - SME Module', dept: 'Steel Melting Shop', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e12', date: '2026-04-08', title: 'Awareness and introduction of Waste Gas Recirculation System in Sinter Plant – 1', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e13', date: '2026-04-09', title: 'Refresher Training on Responsible Steel', dept: 'Air Separation Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e14', date: '2026-04-10', title: 'LOTO - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e15', date: '2026-04-11', title: 'Usage of SCBA', dept: 'Bar and Rod', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e16', date: '2026-04-06', title: 'Working at Height - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e17', date: '2026-04-07', title: 'Permit Applicant (Safety TNI)', dept: 'Coke Oven & Blast Furnace', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e18', date: '2026-04-08', title: 'Confined Space Entry - SME Module', dept: 'CPP, PD, ASP & Utilities', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e19', date: '2026-04-09', title: 'Lifting and Handling', dept: 'CPP, PD, ASP & Utilities', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e20', date: '2026-04-10', title: 'Working at Height - SME Module', dept: 'CPP, PD, ASP & Utilities', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e21', date: '2026-04-11', title: 'Emergency Response Control Plan', dept: 'Grinding Media Mill and Annealing', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e22', date: '2026-04-06', title: 'Machine Guarding - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e23', date: '2026-04-07', title: 'Permit Applicant (Safety TNI)', dept: 'Steel Melting Shop', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e24', date: '2026-04-08', title: 'Machine Guarding', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e25', date: '2026-04-10', title: 'Permit Applicant (Safety TNI)', dept: 'Coke Oven & Blast Furnace', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e26', date: '2026-04-11', title: 'Electrical Safety', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e27', date: '2026-04-06', title: 'Emergency Response Control Plan', dept: 'Stores, Environment, PCI & CPP-1', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e28', date: '2026-04-07', title: 'An OJT training on Emerging Energy Sources for Industrial Applications', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e29', date: '2026-04-06', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e30', date: '2026-04-07', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e31', date: '2026-04-08', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e32', date: '2026-04-09', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e33', date: '2026-04-10', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e34', date: '2026-04-11', title: 'Virtual Session on Green Supply Chain', dept: 'Nominated Employees', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e35', date: '2026-04-13', title: 'Permit to Work - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e36', date: '2026-04-15', title: 'OJT on Operational issues in Recycling of Spillage Materials', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e37', date: '2026-04-16', title: 'Basic Problem-Solving Methods', dept: 'Grinding Media Mill', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e38', date: '2026-04-17', title: 'Lifting and Handling', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e39', date: '2026-04-18', title: 'Process Safety Management', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e40', date: '2026-04-13', title: 'Usage of PPE’s', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e41', date: '2026-04-14', title: 'Carbon Sequestration', dept: 'Coke Oven, Blast Furnace & Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e42', date: '2026-04-15', title: 'E-PTW', dept: 'Blooming Mill Electrical Team', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e43', date: '2026-04-17', title: 'Confined Space Entry - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e44', date: '2026-04-18', title: 'Usage of SCBA & Safety Harness', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e45', date: '2026-04-15', title: 'LOTO - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e46', date: '2026-04-16', title: 'Management of Change', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e47', date: '2026-04-17', title: 'Human Rights', dept: 'SIS Security department', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e48', date: '2026-04-18', title: 'OJT on E-PTW', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e49', date: '2026-04-16', title: 'Driving Plant Reliability – Smart Maintenance with IoT, Predictive Analytics & AI', dept: 'Blooming Mill & Coke Oven', time: '', type: 'External' },
+                    { id: 'e50', date: '2026-04-20', title: 'Fundamentals of Hot Rolling and Heat Treatment', dept: 'Nominated Employees', time: '9.30 AM – 5.30 PM', type: 'Internal with External' },
+                    { id: 'e51', date: '2026-04-21', title: 'Fundamentals of Hot Rolling and Heat Treatment', dept: 'Nominated Employees', time: '2.30 PM', type: 'Internal with External' },
+                    { id: 'e52', date: '2026-04-22', title: 'Electrical Safety - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e53', date: '2026-04-23', title: 'Conveyor Safety', dept: 'CPP, PB, BH & MRSS', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e54', date: '2026-04-24', title: 'OJT on Causes of Grate Bar Wear', dept: 'EOF - 1& 2 & Utility', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e55', date: '2026-04-20', title: 'Permit to Work - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e56', date: '2026-04-21', title: 'E-PTW', dept: 'Bar and Rod', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e57', date: '2026-04-22', title: 'Emergency Response Control Plan', dept: 'EOF - 1& 2 & Utility', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e58', date: '2026-04-23', title: 'OJT on Effective Power Monitoring', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e59', date: '2026-04-24', title: 'OJT on Training Effectiveness', dept: 'Human Resources', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e60', date: '2026-04-25', title: 'Lifting and Handling - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e61', date: '2026-04-20', title: 'Machine Guarding - SME Module', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e62', date: '2026-04-21', title: 'Role and Responsibility of QRT', dept: 'SIS Security department', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e63', date: '2026-04-22', title: 'OJT on Transition from Conventional Rectifier Feeders', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e64', date: '2026-04-23', title: 'Working at Heights', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e65', date: '2026-04-24', title: 'Process Safety Management', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e66', date: '2026-04-21', title: 'Emergency Response Control Plan', dept: 'Wagon Tippler & RMHS', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e67', date: '2026-04-22', title: 'Security Equipment Handling', dept: 'SIS Security department', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e68', date: '2026-04-23', title: 'Machine Guarding - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e69', date: '2026-04-27', title: 'Lead the Change Bespoke Leadership Program', dept: 'Nominated Employees', time: '9.30 AM - 5.30 PM', type: 'External' },
+                    { id: 'e70', date: '2026-04-28', title: 'Lead the Change Bespoke Leadership Program', dept: 'Nominated Employees', time: '9.30 AM - 5.30 PM', type: 'External' },
+                    { id: 'e71', date: '2026-04-29', title: 'First - Aid Responder', dept: 'MBC Workforce and Security Personnel', time: '9.30 AM to 5.30 PM', type: 'External' },
+                    { id: 'e72', date: '2026-04-30', title: 'Lead the Change Bespoke Leadership Program', dept: 'Nominated Employees', time: '9.30 AM - 5.30 PM', type: 'External' },
+                    { id: 'e73', date: '2026-04-29', title: 'Usage of SCBA', dept: 'Coke Oven', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e74', date: '2026-04-27', title: 'Fire Prevention & Protection Measures', dept: 'General Services', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e75', date: '2026-04-28', title: 'Confined Space Entry - SME Module', dept: 'Steel Melting Shop', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e76', date: '2026-04-29', title: 'Usage of PPE’s', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e77', date: '2026-04-30', title: 'OJT on Role of Hopper Level Control', dept: 'Sinter Plant', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e78', date: '2026-04-27', title: 'Emergency Response Control Plan', dept: 'SIS Security department', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e79', date: '2026-04-28', title: 'LOTO - SME Module', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e80', date: '2026-04-29', title: 'Permit to Work - SME Module', dept: 'Quality Assurance', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e81', date: '2026-04-30', title: 'Management of Change', dept: 'Quality Assurance', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e82', date: '2026-04-27', title: 'Confined Space Entry', dept: 'Mills', time: '2.30 PM', type: 'Internal' },
+                    { id: 'e83', date: '2026-04-28', title: 'LOTO', dept: 'Mills', time: '2.30 PM', type: 'Internal' }
+                ],
+                actual: []
+            },
+            savedTexts: {
+                headerTitle1: 'JSW Steel Salem',
+                headerTitle2: 'Learning & Development',
+                headerDocId: 'IMSR/GS/HR – TRD/13'
+            },
+            logos: {
+                logo1: null,
+                logo2: "https://upload.wikimedia.org/wikipedia/commons/3/3c/JSW_Group_logo.svg"
+            }
+        };
+
+        defaultData.events.actual = defaultData.events.plan.map(e => ({...e, type: 'Plan Achieved'}));
+
+        const storageKey = 'jsw_calendar_data_v16'; // Incremented version to apply default changes fresh
+        let appData = JSON.parse(localStorage.getItem(storageKey)) || defaultData;
+
+        function saveToHistory() {
+            history = history.slice(0, historyIndex + 1);
+            history.push(JSON.stringify(appData));
+            historyIndex++;
+            if (history.length > 30) history.shift();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                appData = JSON.parse(history[historyIndex]);
+                saveData();
+                renderCalendar();
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                appData = JSON.parse(history[historyIndex]);
+                saveData();
+                renderCalendar();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem(storageKey, JSON.stringify(appData));
+        }
+
+        document.getElementById('headerTitle1').innerText = appData.savedTexts.headerTitle1;
+        document.getElementById('headerTitle2').innerText = appData.savedTexts.headerTitle2;
+        document.getElementById('headerDocId').innerText = appData.savedTexts.headerDocId;
+        if (appData.logos.logo1) document.getElementById('logo1-img').src = appData.logos.logo1;
+        
+        // For logo 2, since we separated text, we just load the base image. The user can still replace it.
+        if (appData.logos.logo2) document.getElementById('logo2-img').src = appData.logos.logo2;
+
+        const monthSelect = document.getElementById('monthSelect');
+        const yearSelect = document.getElementById('yearSelect');
+        const calendarGrid = document.getElementById('calendarGrid');
+        const modal = document.getElementById('eventModal');
+        const dynamicTitle = document.getElementById('dynamic-calendar-title');
+        const legendContainer = document.getElementById('legendContainer');
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        monthSelect.addEventListener('change', renderCalendar);
+        yearSelect.addEventListener('input', renderCalendar);
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+        });
+
+        function setupModalEnterNavigation() {
+            const inputs = ['eventTopic', 'eventDept', 'eventTime', 'eventType', 'btnSaveEvent'];
+            inputs.forEach((id, index) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (index < inputs.length - 1) {
+                                document.getElementById(inputs[index + 1]).focus();
+                            } else if (id === 'btnSaveEvent') {
+                                saveEvent();
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        setupModalEnterNavigation();
+
+        function renderCalendar() {
+            const year = parseInt(yearSelect.value) || 2026;
+            const month = parseInt(monthSelect.value);
+            const modeText = currentMode === 'plan' ? 'Plan' : 'Actual';
+            dynamicTitle.innerText = `Learning Calendar ${modeText} – ${months[month]} ${year}`;
+            
+            renderLegends();
+            
+            calendarGrid.innerHTML = '';
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            let startOffset = firstDay === 0 ? 6 : firstDay - 1;
+
+            for (let i = 0; i < startOffset; i++) {
+                const empty = document.createElement('div');
+                empty.className = "bg-slate-100/50 leaf-shape opacity-50 min-h-[140px]"; // Restored original shape
+                calendarGrid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateString = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                const cell = document.createElement('div');
+                // Applied the 4px border black and leaf shape exactly as in the user's base code
+                cell.className = "bg-white leaf-shape p-2.5 min-h-[140px] border-4 border-black cursor-default flex flex-col day-cell relative group";
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = "flex justify-between items-start mb-2";
+                
+                const addBtn = document.createElement('button');
+                addBtn.className = "add-btn w-6 h-6 rounded-full bg-black text-white flex items-center justify-center font-bold text-sm hover:scale-110 cursor-pointer shadow-sm";
+                addBtn.innerHTML = "+";
+                addBtn.onclick = () => openModal(dateString);
+                headerDiv.appendChild(addBtn);
+
+                const dateNum = document.createElement('div');
+                dateNum.className = "text-[1.4rem] font-bold text-slate-400";
+                dateNum.innerText = String(day).padStart(2, '0');
+                headerDiv.appendChild(dateNum);
+                cell.appendChild(headerDiv);
+
+                const dayEvents = appData.events[currentMode].filter(e => e.date === dateString);
+                dayEvents.forEach(evt => {
+                    const evtDiv = document.createElement('div');
+                    // Applies the user's specific original color palette classes
+                    const colorClass = colors[evt.type] || 'bg-slate-800 text-white border-2 border-black';
+                    evtDiv.className = `event-pill p-2 mb-2 cursor-pointer shadow-sm ${colorClass}`;
+                    
+                    // Logic to completely hide the time block if time is blank
+                    const timeHtml = evt.time && evt.time.trim() !== '' ? `<div class="mt-2 font-bold text-[10px] bg-black/10 inline-block px-2 py-0.5 rounded">${evt.time}</div>` : '';
+                    
+                    evtDiv.innerHTML = `
+                        <div class="font-extrabold text-xs leading-tight mb-0.5">${evt.title}</div>
+                        <div class="text-[11px] font-semibold opacity-90">${evt.dept}</div>
+                        ${timeHtml}
+                    `;
+                    evtDiv.onclick = (e) => { e.stopPropagation(); openModal(dateString, evt); };
+                    cell.appendChild(evtDiv);
+                });
+                calendarGrid.appendChild(cell);
+            }
+        }
+
+        function renderLegends() {
+            legendContainer.innerHTML = '';
+            const types = currentMode === 'plan' ? planTypes : actualTypes;
+            types.forEach(type => {
+                const div = document.createElement('div');
+                div.className = "flex items-center gap-2";
+                
+                const dot = document.createElement('div');
+                const bgClass = colors[type] ? colors[type].split(' ')[0] : 'bg-white';
+                dot.className = `w-[18px] h-[18px] rounded-sm border-2 border-black ${bgClass}`;
+                
+                const label = document.createElement('span');
+                label.className = "text-sm font-extrabold text-black uppercase tracking-wide";
+                label.innerText = type;
+                
+                div.appendChild(dot);
+                div.appendChild(label);
+                legendContainer.appendChild(div);
+            });
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btnPlan').className = mode === 'plan' ? "px-6 py-2 rounded font-bold text-sm transition-all shadow bg-white text-blue-700" : "px-6 py-2 rounded font-bold text-sm transition-all text-slate-500 hover:text-slate-800";
+            document.getElementById('btnActual').className = mode === 'actual' ? "px-6 py-2 rounded font-bold text-sm transition-all shadow bg-white text-blue-700" : "px-6 py-2 rounded font-bold text-sm transition-all text-slate-500 hover:text-slate-800";
+            renderCalendar();
+        }
+
+        function openModal(dateString, existingEvent = null) {
+            selectedDate = dateString;
+            editingEventId = existingEvent ? existingEvent.id : null;
+            document.getElementById('modalTitle').innerText = existingEvent ? 'Edit Event' : 'Add Event';
+            document.getElementById('eventTopic').value = existingEvent ? existingEvent.title : '';
+            document.getElementById('eventDept').value = existingEvent ? existingEvent.dept : '';
+            
+            const timeInput = document.getElementById('eventTime');
+            const ampmSelect = document.getElementById('eventAMPM');
+            
+            if (existingEvent && existingEvent.time) {
+                const match = existingEvent.time.match(/^(.+?)\s*(AM|PM)?$/);
+                timeInput.value = match ? match[1].trim() : '';
+                ampmSelect.value = match && match[2] ? match[2] : 'PM'; // Default to PM if parsing fails but time exists
+            } else {
+                timeInput.value = '';
+                ampmSelect.value = 'PM'; // Default selection
+            }
+
+            document.getElementById('btnDelete').classList.toggle('hidden', !existingEvent);
+            
+            const select = document.getElementById('eventType');
+            select.innerHTML = '';
+            const opts = currentMode === 'plan' ? planTypes : actualTypes;
+            opts.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt;
+                el.textContent = opt;
+                select.appendChild(el);
+            });
+            if (existingEvent) select.value = existingEvent.type;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Auto focus on the first input field when modal opens
+            setTimeout(() => {
+                document.getElementById('eventTopic').focus();
+            }, 100);
+        }
+
+        function saveEvent() {
+            const title = document.getElementById('eventTopic').value.trim();
+            const dept = document.getElementById('eventDept').value.trim();
+            let time = document.getElementById('eventTime').value.trim();
+            const ampm = document.getElementById('eventAMPM').value;
+            const type = document.getElementById('eventType').value;
+
+            // Ensures that if time is left blank, it stays completely blank
+            if (time) {
+                time = ampm ? `${time} ${ampm}` : time;
+            } else {
+                time = "";
+            }
+
+            if (!title) return alert('Event topic is required');
+
+            saveToHistory();
+
+            if (editingEventId) {
+                if (currentMode === 'plan') {
+                    const p = appData.events.plan.findIndex(e => e.id === editingEventId);
+                    if (p > -1) appData.events.plan[p] = {...appData.events.plan[p], title, dept, time, type};
+                    const a = appData.events.actual.findIndex(e => e.id === editingEventId);
+                    if (a > -1) {
+                        appData.events.actual[a].title = title;
+                        appData.events.actual[a].dept = dept;
+                        appData.events.actual[a].time = time;
+                    }
+                } else {
+                    const a = appData.events.actual.findIndex(e => e.id === editingEventId);
+                    if (a > -1) appData.events.actual[a] = {...appData.events.actual[a], title, dept, time, type};
+                }
+            } else {
+                const newId = Date.now().toString();
+                const newEvent = {id: newId, date: selectedDate, title, dept, time, type};
+                if (currentMode === 'plan') {
+                    appData.events.plan.push(newEvent);
+                    appData.events.actual.push({...newEvent, type: 'Plan Achieved'});
+                } else {
+                    appData.events.actual.push(newEvent);
+                }
+            }
+            saveData();
+            closeModal();
+            renderCalendar();
+        }
+
+        function deleteEvent() {
+            if (!confirm("Delete this event?")) return;
+            saveToHistory();
+            if (currentMode === 'plan') {
+                appData.events.plan = appData.events.plan.filter(e => e.id !== editingEventId);
+                appData.events.actual = appData.events.actual.filter(e => e.id !== editingEventId);
+            } else {
+                appData.events.actual = appData.events.actual.filter(e => e.id !== editingEventId);
+            }
+            saveData();
+            closeModal();
+            renderCalendar();
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveBackup() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `JSW_Calendar_Backup.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function restoreBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    appData = JSON.parse(e.target.result);
+                    saveData();
+                    location.reload();
+                } catch(err) {
+                    alert("Invalid backup file");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function triggerUpload(id) {
+            document.getElementById(id + '-upload').click();
+        }
+
+        function handleUpload(event, id) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById(id + '-img').src = e.target.result;
+                    appData.logos[id] = e.target.result;
+                    saveData();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function clearLogo(id) {
+            const empty = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'></svg>";
+            document.getElementById(id + '-img').src = empty;
+            appData.logos[id] = empty;
+            saveData();
+        }
+
+        // Initialize
+        saveToHistory();
+        renderCalendar();
+    </script>
+</body>
+</html>
