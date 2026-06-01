@@ -691,5 +691,19 @@
         saveToHistory();
         renderCalendar();
     </script>
+    const supabaseUrl = "https://ftcvbyvriyrwrkhxgiag.supabase.co/";
+const supabaseKey = "YOUR_PUBLISHABLE_KEY";
+
+const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    async function testSupabase() {
+    const { data, error } = await supabase
+        .from('calendar_events')
+        .select('*');
+
+    console.log("DATA:", data);
+    console.log("ERROR:", error);
+}
+
+testSupabase();
 </body>
 </html>
